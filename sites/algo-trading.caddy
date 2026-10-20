@@ -1,0 +1,36 @@
+# algo-trading's site file for the shared Caddy (docker-compose.yml here).
+# One free Let's Encrypt cert for {$ALGO_DOMAIN} (a cert is scoped to a
+# hostname, not a port), reused across every port below via TLS SNI - so the
+# per-service port scheme (every frontend's own api.ts) needs no restructuring
+# into subdomains. Each block terminates TLS and reverse-proxies plaintext to
+# the algo-* aliases that the project's docker-compose.prod.yml puts on the
+# shared `edge` network.
+#
+# Ports mirror algo-trading's .env *_PORT values - if you change one there,
+# mirror it here AND in this directory's docker-compose.yml `ports:`.
+
+{$ALGO_DOMAIN}:8090 {
+	reverse_proxy algo-web-frontend:80
+}
+
+{$ALGO_DOMAIN}:8000 {
+	reverse_proxy algo-signal-engine-backend:8000
+}
+
+# market-data-frontend is operator tooling (Dhan/Delta feed status,
+# instrument-master sync, Dhan token renewal), not an end-user screen.
+{$ALGO_DOMAIN}:8083 {
+	reverse_proxy algo-market-data-frontend:80
+}
+
+{$ALGO_DOMAIN}:8001 {
+	reverse_proxy algo-market-data-backend:8000
+}
+
+{$ALGO_DOMAIN}:8002 {
+	reverse_proxy algo-execution-backend:8000
+}
+
+{$ALGO_DOMAIN}:8004 {
+	reverse_proxy algo-accounts-backend:8000
+}

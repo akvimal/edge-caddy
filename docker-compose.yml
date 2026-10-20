@@ -1,0 +1,64 @@
+# Shared edge proxy (own repo, deployed as its own container) for the VPS - NOT part of any one project's compose stack.
+# Lives at e.g. /opt/caddy on the VPS (this repo is cloned there), so
+# algo-trading and every other project deployed to the box can sit behind the
+# same Caddy instead of each shipping their own.
+#
+# How projects plug in:
+#   1. Each project's compose joins the external `edge` network below, giving
+#      the services Caddy fronts a project-prefixed alias (e.g.
+#      algo-web-frontend) - aliases, not bare service names, because every
+#      project on a shared network would otherwise collide on names like
+#      `web-frontend` / `postgres`.
+#   2. Each project drops a site file into ./sites/*.caddy (see
+#      sites/algo-trading.caddy) proxying to those aliases.
+#   3. Any non-80/443 port a project serves on must be published here too -
+#      only one thing can own a host port, and this is now the thing.
+#
+# First-time setup on the VPS:
+#   cp .env.example .env   # set ALGO_DOMAIN
+#   docker compose up -d   # creates the `edge` network
+# Then (re)deploy each project, which attaches to it. Reload after adding or
+# editing a site file, no restart needed:
+#   docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+
+name: caddy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      # Site files read {$ALGO_DOMAIN} etc. - Caddy substitutes env vars at
+      # load time. One variable per project that needs a hostname.
+      ALGO_DOMAIN: ${ALGO_DOMAIN}
+    ports:
+      # 80 is required for ACME HTTP-01 (issuing/renewing Let's Encrypt certs).
+      - "80:80"
+      - "443:443"
+      # --- algo-trading (mirrors its .env *_PORT values) ---
+      - "8090:8090"   # web-frontend (SHELL_PORT, "the default URL")
+      - "8000:8000"   # signal-engine-backend
+      - "8083:8083"   # market-data-frontend
+      - "8001:8001"   # market-data-backend
+      - "8002:8002"   # execution-backend
+      - "8004:8004"   # accounts-backend
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      # Cert storage - MUST persist. Let's Encrypt rate-limits issuance per
+      # hostname; losing this volume and re-issuing repeatedly can trip it.
+      # (Fresh volume here: certs are re-issued once on first start, they are
+      # not carried over from algo-trading's old caddy-data volume.)
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+
+networks:
+  edge:
+    # Fixed name so other projects reference it as `external: true`.
+    name: edge
+
+volumes:
+  caddy-data:
+  caddy-config:

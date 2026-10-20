@@ -1,0 +1,4 @@
+# Shared Caddyfile - one file per project in ./sites, nothing project-specific
+# here. Add a project by dropping sites/<project>.caddy (and publishing any
+# new ports in docker-compose.yml).
+import /etc/caddy/sites/*.caddy
